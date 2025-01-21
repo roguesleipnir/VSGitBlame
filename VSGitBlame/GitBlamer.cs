@@ -32,7 +32,8 @@ internal static class GitBlamer
         {
             RedirectStandardOutput = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8
         };
         process.Start();
         string result = process.StandardOutput.ReadToEnd();

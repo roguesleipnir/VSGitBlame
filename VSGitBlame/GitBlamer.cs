@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using VSGitBlame.Core;
 
 namespace VSGitBlame;
@@ -32,7 +33,8 @@ internal static class GitBlamer
         {
             RedirectStandardOutput = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetDirectoryName(filePath)
         };
         process.Start();
         string result = process.StandardOutput.ReadToEnd();

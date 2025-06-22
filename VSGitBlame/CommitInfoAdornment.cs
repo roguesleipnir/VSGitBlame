@@ -12,25 +12,67 @@ public class CommitInfoAdornment
     readonly IWpfTextView _view;
     readonly IAdornmentLayer _adornmentLayer;
     readonly ITextDocument _textDocument;
+    int _lastCaretLine = -1;
 
     public CommitInfoAdornment(IWpfTextView view)
     {
         _view = view;
         _adornmentLayer = view.GetAdornmentLayer("CommitInfoAdornment");
-        _view.LayoutChanged += OnLayoutChanged;
-        _view.VisualElement.MouseLeftButtonUp += VisualElement_MouseLeftButtonUp;
         _textDocument = _view.TextBuffer.Properties.GetProperty<ITextDocument>(typeof(ITextDocument));
+
+        // Event Subscriptions
+        _view.LayoutChanged += OnLayoutChanged;
         _textDocument.FileActionOccurred += TextDocument_FileActionOccurred;
+        _view.Caret.PositionChanged += Caret_PositionChanged;
+        //_view.VisualElement.MouseLeftButtonUp += VisualElement_MouseLeftButtonUp;
     }
+
+    private void Caret_PositionChanged(object sender, CaretPositionChangedEventArgs e)
+    {
+        int currentLine = e.NewPosition.BufferPosition.GetContainingLine().LineNumber;
+        if (currentLine != _lastCaretLine)
+        {
+            _lastCaretLine = currentLine;
+            OnCaretLineChanged(currentLine, e);
+        }
+    }
+
 
     private void TextDocument_FileActionOccurred(object sender, TextDocumentFileActionEventArgs e)
     {
         GitBlamer.InvalidateCache(_textDocument.FilePath);
     }
 
+    private void OnCaretLineChanged(int lineNumber, CaretPositionChangedEventArgs e)
+    {
+        _adornmentLayer.RemoveAllAdornments();
+
+        // Only show commit info if the document is not dirty (no unsaved changes)
+        if (_textDocument.IsDirty)
+            return;
+
+        // Get the caret position in the view
+        var caretPosition = e.NewPosition.BufferPosition;
+        var textViewLine = _view.GetTextViewLineContainingBufferPosition(caretPosition);
+
+        if (textViewLine == null)
+            return;
+
+        var commitInfo = GitBlamer.GetBlame(_textDocument.FilePath, lineNumber + 1);
+
+        if (commitInfo == null)
+            return;
+
+        ShowCommitInfo(commitInfo, textViewLine);
+    }
+
     private void VisualElement_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         _adornmentLayer.RemoveAllAdornments();
+
+        // Only show commit info if the document is not dirty (no unsaved changes)
+        if (_textDocument.IsDirty)
+            return;
 
         var mousePosition = e.GetPosition(_view.VisualElement);
         
@@ -80,11 +122,10 @@ public class CommitInfoAdornment
 
     void ShowCommitInfo(CommitInfo commitInfo, ITextViewLine line)
     {
-        double top = line.Top - 52 < 0 ? 0 : line.Top - 52;
         var container = CommitInfoViewFactory.Get(commitInfo, _adornmentLayer);
 
         Canvas.SetLeft(container, line.Right);
-        Canvas.SetTop(container, top);
+        Canvas.SetTop(container, line.Top);
 
         _adornmentLayer.RemoveAllAdornments();
         SnapshotSpan span = new SnapshotSpan(_adornmentLayer.TextView.TextSnapshot, Span.FromBounds(line.Start, line.End));

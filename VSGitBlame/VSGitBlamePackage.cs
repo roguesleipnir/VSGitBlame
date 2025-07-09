@@ -25,6 +25,7 @@ namespace VSGitBlame;
 /// </remarks>
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
 [Guid(PackageGuidString)]
+[ProvideOptionPage(typeof(CommitInfoViewOptions), "Quick Blame", "Display Settings", 0, 0, true)]
 public sealed class VSGitBlamePackage : AsyncPackage
 {
     /// <summary>
@@ -46,6 +47,9 @@ public sealed class VSGitBlamePackage : AsyncPackage
         // When initialized asynchronously, the current thread may be a background thread at this point.
         // Do any initialization that requires the UI thread after switching to the UI thread.
         await this.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        
+        // Initialize settings in the CommitInfoViewFactory
+        CommitInfoViewFactory.InitializeSettings(this);
     }
 
     #endregion

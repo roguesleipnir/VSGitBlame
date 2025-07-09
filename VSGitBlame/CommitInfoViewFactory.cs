@@ -7,6 +7,7 @@ using System.Windows.Media;
 using VSGitBlame.Core;
 using System.Linq;
 using Microsoft.VisualStudio.Text.Editor;
+using Color = System.Drawing.Color;
 
 namespace VSGitBlame;
 
@@ -16,11 +17,78 @@ public static class CommitInfoViewFactory
     static TextBlock _summaryView;
     static TextBlock _commitDetailsView;
     static Image _profileIcon;
+    static StackPanel _detailsView;
+    static Border _detailsViewContainer;
 
     static bool _firstMouseMoveFired = false;
     static bool _isDetailsVisible = false;
     static IAdornmentLayer _adornmentLayer;
+    
+    private static VSGitBlamePackage _package;
+    private static CommitInfoViewOptions _options;
 
+    public static void InitializeSettings(VSGitBlamePackage package)
+    {
+        _package = package;
+        LoadSettings();
+    }
+
+    private static void LoadSettings()
+    {
+        if (_package != null)
+        {
+            _options = _package.GetDialogPage(typeof(CommitInfoViewOptions)) as CommitInfoViewOptions;
+        }
+    }
+
+    public static void RefreshSettings()
+    {
+        LoadSettings();
+        if (_options != null)
+        {
+            ApplySettings();
+        }
+    }
+
+    private static void ApplySettings()
+    {
+        if (_summaryView != null && _options != null)
+        {
+            // Apply summary view settings
+            _summaryView.FontSize = _options.SummaryFontSize;
+
+            // Override the foreground color if specified, otherwise use theme detection
+            if (_options.SummaryFontColor != Color.Transparent)
+            {
+                _summaryView.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(
+                    _options.SummaryFontColor.A, 
+                    _options.SummaryFontColor.R, 
+                    _options.SummaryFontColor.G, 
+                    _options.SummaryFontColor.B));
+            }
+            else
+            {
+                // Use theme detection if no specific color is set
+                var backgroundColor = VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowBackgroundColorKey);
+                _summaryView.Foreground = backgroundColor.GetBrightness() > 0.5 ? 
+                    Brushes.DarkBlue : 
+                    Brushes.LightGray;
+            }
+        }
+
+        if (_commitDetailsView != null && _options != null)
+        {
+            // Apply details view settings
+            _commitDetailsView.FontSize = _options.DetailsFontSize;
+            _commitDetailsView.Foreground = _options.GetDetailsFontBrush();
+        }
+
+        if (_detailsView != null && _options != null)
+        {
+            // Apply background color setting
+            _detailsViewContainer.Background = _options.GetDetailsBackgroundBrush();
+        }
+    }
 
     static CommitInfoViewFactory()
     {
@@ -28,18 +96,17 @@ public static class CommitInfoViewFactory
         var backgroundColor = VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowBackgroundColorKey);
         _summaryView = new TextBlock
         {
-            Opacity = 0.6,
+            Opacity = 0.5,
             Background = Brushes.Transparent,
             Foreground = backgroundColor.GetBrightness() > 0.5 ? Brushes.DarkBlue : Brushes.LightGray,
             FontStyle = FontStyles.Italic,
-            FontWeight = FontWeights.Bold,
+            FontWeight = FontWeights.Normal,
         };
         #endregion
 
-        #region Info View
-        var infoView = new StackPanel
+        #region Details View
+        _detailsView = new StackPanel
         {
-            Background = new SolidColorBrush(Colors.DarkBlue),
             Orientation = Orientation.Horizontal,
         };
 
@@ -49,33 +116,34 @@ public static class CommitInfoViewFactory
             Height = 50,
             Margin = new Thickness(0, 0, 3, 0),
         };
-        infoView.Children.Add(_profileIcon);
+        _detailsView.Children.Add(_profileIcon);
 
         _commitDetailsView = new TextBlock
         {
             Foreground = new SolidColorBrush(Colors.White),
             FontWeight = FontWeights.Bold,
         };
-        infoView.Children.Add(_commitDetailsView);
+        _detailsView.Children.Add(_commitDetailsView);
 
-        var infoViewContainer = new Border
+        _detailsViewContainer = new Border
         {
             BorderThickness = new Thickness(1),
+            Background = new SolidColorBrush(Colors.DarkBlue),
             BorderBrush = Brushes.Transparent,
             Visibility = Visibility.Hidden,
-            Padding = new Thickness(2)
+            Padding = new Thickness(5),
         };
-        infoViewContainer.Child = infoView;
+        _detailsViewContainer.Child = _detailsView;
         #endregion
 
         #region Container
         var rootPanel = new StackPanel
         {
             Orientation = Orientation.Vertical,
-            Background = Brushes.Transparent
+            Background = Brushes.Transparent,
         };
-        rootPanel.Children.Add(infoViewContainer);
         rootPanel.Children.Add(_summaryView);
+        rootPanel.Children.Add(_detailsViewContainer);
 
         rootPanel.MouseMove += (sender, e) =>
         {
@@ -88,7 +156,7 @@ public static class CommitInfoViewFactory
             if (_isDetailsVisible)
                 return;
 
-            infoViewContainer.Visibility = Visibility.Visible;
+            _detailsViewContainer.Visibility = Visibility.Visible;
             _isDetailsVisible = true;
         };
 
@@ -96,8 +164,7 @@ public static class CommitInfoViewFactory
         {
             _firstMouseMoveFired = false;
             _isDetailsVisible = false;
-            infoViewContainer.Visibility = Visibility.Hidden;
-            _container.Visibility = Visibility.Hidden;
+            _detailsViewContainer.Visibility = Visibility.Hidden;
         };
 
         _container = new Border
